@@ -18,14 +18,22 @@ import android.media.AudioManager.SCO_AUDIO_STATE_ERROR
 import com.twilio.audioswitch.android.BluetoothDeviceWrapper
 import com.twilio.audioswitch.android.BluetoothIntentProcessor
 import com.twilio.audioswitch.android.LogWrapper
+import com.twilio.audioswitch.selection.AudioDeviceManager
 
 private const val TAG = "BluetoothDeviceReceiver"
 
 internal class BluetoothHeadsetReceiver(
-    private val context: Context,
-    private val logger: LogWrapper,
-    private val bluetoothIntentProcessor: BluetoothIntentProcessor,
-    var deviceListener: BluetoothDeviceConnectionListener? = null
+        private val context: Context,
+        private val logger: LogWrapper,
+        private val bluetoothIntentProcessor: BluetoothIntentProcessor,
+        private val audioDeviceManager: AudioDeviceManager,
+        private val enableBluetoothScoJob: BluetoothScoJob = BluetoothScoJob(logger) {
+            audioDeviceManager.enableBluetoothSco(true)
+        },
+        private val disableBluetoothScoJob: BluetoothScoJob = BluetoothScoJob(logger) {
+            audioDeviceManager.enableBluetoothSco(false)
+        },
+        var deviceListener: BluetoothDeviceConnectionListener? = null
 ) : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -56,9 +64,11 @@ internal class BluetoothHeadsetReceiver(
                         when (state) {
                             SCO_AUDIO_STATE_CONNECTED -> {
                                 logger.d(TAG, "Bluetooth SCO Audio connected")
+                                enableBluetoothScoJob.cancelBluetoothScoJob()
                             }
                             SCO_AUDIO_STATE_DISCONNECTED -> {
                                 logger.d(TAG, "Bluetooth SCO Audio disconnected")
+                                disableBluetoothScoJob.cancelBluetoothScoJob()
                             }
                             SCO_AUDIO_STATE_ERROR -> {
                                 logger.e(TAG, "Error retrieving Bluetooth SCO Audio state")
@@ -68,6 +78,14 @@ internal class BluetoothHeadsetReceiver(
                 }
                 else -> {}
             }
+        }
+    }
+
+    fun enableBluetoothSco(enable: Boolean) {
+        if (enable) {
+            enableBluetoothScoJob.executeBluetoothScoJob()
+        } else {
+            disableBluetoothScoJob.executeBluetoothScoJob()
         }
     }
 
@@ -84,9 +102,9 @@ internal class BluetoothHeadsetReceiver(
     private fun isHeadsetDevice(deviceWrapper: BluetoothDeviceWrapper): Boolean =
             deviceWrapper.deviceClass?.let { deviceClass ->
                 deviceClass == AUDIO_VIDEO_HANDSFREE ||
-                deviceClass == AUDIO_VIDEO_WEARABLE_HEADSET ||
-                deviceClass == AUDIO_VIDEO_CAR_AUDIO ||
-                deviceClass == AUDIO_VIDEO_HEADPHONES ||
-                deviceClass == UNCATEGORIZED
+                        deviceClass == AUDIO_VIDEO_WEARABLE_HEADSET ||
+                        deviceClass == AUDIO_VIDEO_CAR_AUDIO ||
+                        deviceClass == AUDIO_VIDEO_HEADPHONES ||
+                        deviceClass == UNCATEGORIZED
             } ?: false
 }
